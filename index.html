@@ -345,202 +345,198 @@ function buildOverview(){
 
 // ── PLAYGROUND ────
 function buildPlayground(){
-  const postDates = fd.filter(d=>d>=W2A);
+  // W2A go-live = W2A ("2026-06-04")
+  const liveDates = fd.filter(d=>d>=W2A);
   const preDates  = fd.filter(d=>d<W2A);
-  const liveDates = fd.filter(d=>d>=W2A_LIVE);   // Jun 4+ (go-live)
 
-  // ── Raw app metrics ───────────────────────────────────────
-  const mobStart  = sum("Unique_Playground_Mobile_number_entered", liveDates.length?liveDates:fd);
-  const mobDOB    = sum("Unique_Playground_DOB_entered");
-  const mobCITC   = sum("Unique_App_created_Passed_CITC_Apps_and_SDK");
-  const mobS1rej  = sum("Unique_Rejected_Min_Salary", liveDates.length?liveDates:fd)
-                  + sum("Unique_Rejected_No_Income",  liveDates.length?liveDates:fd);
-  const mobS2rej  = sum("Unique_Rejected_DBR",  liveDates.length?liveDates:fd);
-  const mobS3rej  = sum("Unique_Rejected_LOS",  liveDates.length?liveDates:fd)
-                  + sum("Unique_Rejected_Min_and_Max_Age", liveDates.length?liveDates:fd);
-  const mobPassed = mobStart - mobS1rej - mobS2rej - mobS3rej;
-  const mobSub    = sum("mob_submitted", liveDates.length?liveDates:fd);
-  const tBlk      = sum("Unique_Registration_Blocked_by_CITC");
-  const tUnv      = sum("Unique_Registration_Unverifed_with_CITC");
-  const totalSub  = sum("app_submitted");
+  // Helper: sum a field only over live dates
+  const lsum = (m, dt) => (dt||liveDates).reduce((a,d)=>a+(daily[d][m]||0),0);
+  const lser = (m, dt) => (dt||liveDates).map(d=>daily[d][m]||0);
 
-  // ── Web2App metrics (from w2a daily) ─────────────────────
-  const w2aDts = W2A_ALL.filter(d=>d>=W2A_LIVE && fd.includes(d));
-  const w2aS = k => w2aDts.reduce((a,d)=>a+(w2ad[d]?w2ad[d][k]:0),0);
-  const waAtt  = w2aS('attempts');
-  const waDist = w2aS('distinct');
-  const waComp = w2aS('completed');
-  const waCrea = w2aS('created');
+  // ── Web2App metrics (w2a_* fields in RAW.daily, live dates only) ──────────
+  const waAtt  = lsum('w2a_attempts');
+  const waDist = lsum('w2a_distinct');
+  const waComp = lsum('w2a_completed');
+  const waCrea = lsum('w2a_created');
   const waDrop = waComp - waCrea;
 
-  // ── KPI cards ─────────────────────────────────────────────
-  document.getElementById("playKpi").innerHTML=[
-    {l:"Web2App: Distinct Users",    v:N(waDist),  s:"Unique mobiles on web form (go-live)",     c:"pl"},
-    {l:"Web2App: Completion Rate",   v:pct(waComp,waDist)+"%", s:"Distinct → Completed playground", c:"pl"},
-    {l:"Web2App: Created App",       v:N(waCrea),  s:pct(waCrea,waComp)+"% of completed",        c:"pl"},
-    {l:"Web2App: Drop-off",          v:N(waDrop),  s:"Completed web but never submitted in-app",  c:"dn"},
-    {l:"Mobile: Started Playground", v:N(mobStart),s:"In-app mobile # entry",                    c:""},
-    {l:"Mobile: Pass Rate",          v:pct(mobPassed,mobStart)+"%", s:"Passed all 3 screens",    c:""},
-    {l:"Mobile: Submitted",          v:N(mobSub),  s:"Mobile-only submissions",                   c:"ok"},
-    {l:"Total Submitted",            v:N(totalSub),s:"Web2App + Mobile combined",                 c:"ok"},
-  ].map(x=>`<div class="kc ${x.c}"><div class="kl">${x.l}</div><div class="kv">${x.v}</div><div class="ks">${x.s}</div></div>`).join("");
+  // ── Mobile metrics (live dates only) ──────────────────────────────────────
+  const mobStart  = lsum('Unique_Playground_Mobile_number_entered');
+  const mobS1rej  = lsum('Unique_Rejected_Min_Salary') + lsum('Unique_Rejected_No_Income');
+  const mobS2rej  = lsum('Unique_Rejected_DBR');
+  const mobS3rej  = lsum('Unique_Rejected_LOS') + lsum('Unique_Rejected_Min_and_Max_Age');
+  const mobPassed = mobStart - mobS1rej - mobS2rej - mobS3rej;
+  const mobSub    = lsum('mob_submitted');
 
-  // ── Web2App funnel (side) ─────────────────────────────────
+  // ── All-dates metrics for registration section ────────────────────────────
+  const mobDOB  = sum('Unique_Playground_DOB_entered');
+  const mobCITC = sum('Unique_App_created_Passed_CITC_Apps_and_SDK');
+  const tBlk    = sum('Unique_Registration_Blocked_by_CITC');
+  const tUnv    = sum('Unique_Registration_Unverifed_with_CITC');
+  const totalSub = sum('app_submitted');
+
+  // ── KPI cards ─────────────────────────────────────────────────────────────
+  document.getElementById('playKpi').innerHTML=[
+    {l:'Web2App: Distinct Users',    v:N(waDist),  s:'Unique mobiles on web form (go-live+)',     c:'pl'},
+    {l:'Web2App: Completion Rate',   v:pct(waComp,waDist)+'%', s:'Distinct → Completed playground', c:'pl'},
+    {l:'Web2App: Created App',       v:N(waCrea),  s:pct(waCrea,waComp)+'% of completed',        c:'pl'},
+    {l:'Web2App: Drop-off',          v:N(waDrop),  s:'Passed web but never submitted in-app',     c:'dn'},
+    {l:'Mobile: Started Playground', v:N(mobStart),s:'In-app mobile # entry (go-live+)',          c:''},
+    {l:'Mobile: Pass Rate',          v:pct(mobPassed,mobStart)+'%', s:'Passed all 3 screens',    c:''},
+    {l:'Mobile: Submitted',          v:N(mobSub),  s:'Mobile-only submissions (go-live+)',         c:'ok'},
+    {l:'Total Submitted (period)',   v:N(totalSub),s:'Web2App + Mobile combined (full period)',    c:'ok'},
+  ].map(x=>`<div class="kc ${x.c}"><div class="kl">${x.l}</div><div class="kv">${x.v}</div><div class="ks">${x.s}</div></div>`).join('');
+
+  // ── Web2App funnel bars ───────────────────────────────────────────────────
   const wStages=[
-    {l:"Total Attempts (incl. revisits)", v:waAtt,  c:"rgba(192,132,252,.5)"},
-    {l:"Distinct Mobile Users",           v:waDist, c:"rgba(192,132,252,.7)"},
-    {l:"Completed Playground (S1+S2+S3)", v:waComp, c:C.pl},
-    {l:"Created Application ✓",           v:waCrea, c:C.ac2, bold:true},
+    {l:'Total Attempts (incl. revisits)', v:waAtt,  c:'rgba(192,132,252,.5)'},
+    {l:'Distinct Mobile Users',           v:waDist, c:'rgba(192,132,252,.7)'},
+    {l:'Completed Playground (S1+S2+S3)', v:waComp, c:C.pl},
+    {l:'Created Application ✓',           v:waCrea, c:C.ac2, bold:true},
   ];
   const wMax=waAtt||1;
-  let wh="";
+  let wh='';
   wStages.forEach((s,i)=>{
     const w=Math.max(3,s.v/wMax*100);
     const fp=i===0?null:pct(s.v,wStages[i-1].v);
-    let badge="";
-    if(fp!==null){const cls=fp>=80?"dg":fp>=50?"dok":"dd";badge=`<span class="db ${cls}">${fp}%</span>`;}
-    wh+=`<div class="fs"><div class="fl" style="font-size:11px;color:${s.bold?"var(--ac2)":"var(--tm)"};">${s.l}</div><div class="fbw"><div class="fb" style="width:${w}%;background:${s.c};height:28px;">${N(s.v)}</div><div style="display:flex;gap:6px;align-items:center;"><span class="fc">${N(s.v)}</span>${badge}</div></div></div>`;
+    let badge='';
+    if(fp!==null){const cls=fp>=80?'dg':fp>=50?'dok':'dd';badge=`<span class="db ${cls}">${fp}%</span>`;}
+    wh+=`<div class="fs"><div class="fl" style="font-size:11px;color:${s.bold?'var(--ac2)':'var(--tm)'};">${s.l}</div><div class="fbw"><div class="fb" style="width:${w}%;background:${s.c};height:28px;">${N(s.v)}</div><div style="display:flex;gap:6px;align-items:center;"><span class="fc">${N(s.v)}</span>${badge}</div></div></div>`;
     if(i<wStages.length-1)wh+=`<div class="fa">▼</div>`;
   });
   wh+=`<div style="margin-top:10px;padding:8px 12px;background:rgba(255,92,124,.07);border-radius:7px;border-left:3px solid var(--dn);font-size:11px;">
-    🚨 <strong style="color:var(--dn);">${N(waDrop)}</strong> passed web playground but never submitted (${pct(waDrop,waComp)}% drop-off). Pre-qualified leads going cold.
+    🚨 <strong style="color:var(--dn);">${N(waDrop)}</strong> passed web playground but never submitted (${pct(waDrop,waComp)}% drop-off) — pre-qualified cold leads.
   </div>`;
-  document.getElementById("w2aFunnelSide").innerHTML=wh;
+  document.getElementById('w2aFunnelSide').innerHTML=wh;
 
-  // ── Mobile funnel (side) ──────────────────────────────────
+  // ── Mobile funnel bars ────────────────────────────────────────────────────
   const mMax=mobStart||1;
-  const mStages=[
-    {l:"Started In-App Playground",       v:mobStart,  c:C.ios,  bold:false},
-    {l:"❌ S1 Income rejections",         v:mobS1rej,  c:C.s1,   rej:true},
-    {l:"❌ S2 DBR rejections",            v:mobS2rej,  c:C.s2,   rej:true},
-    {l:"❌ S3 LOS/Age rejections",        v:mobS3rej,  c:C.s3,   rej:true},
-    {l:"Passed All Screens ✓",            v:mobPassed, c:C.ac2,  bold:true},
-    {l:"Mobile Submitted (in-app only) ✓",v:mobSub,    c:C.ac2,  bold:true},
-  ];
-  let mh="";
-  mStages.forEach((s,i)=>{
+  let mh='';
+  // Start row
+  mh+=`<div class="fs"><div class="fl" style="font-size:11px;">Started In-App Playground</div><div class="fbw"><div class="fb" style="width:100%;background:${C.ios};opacity:.85;height:28px;">${N(mobStart)}</div><span class="fc">${N(mobStart)}</span></div></div>`;
+  mh+=`<div style="padding:2px 0 2px 260px;font-size:10px;color:var(--tm);">— rejection breakdown —</div>`;
+  // Rejections
+  [{l:'❌ S1 Income rejections',v:mobS1rej,c:C.s1},{l:'❌ S2 DBR rejections',v:mobS2rej,c:C.s2},{l:'❌ S3 LOS/Age rejections',v:mobS3rej,c:C.s3}].forEach(s=>{
     const w=Math.max(2,s.v/mMax*100);
-    const pctOfStart=pct(s.v,mMax);
-    if(s.rej){
-      mh+=`<div class="fs" style="margin:2px 0;"><div class="fl" style="font-size:11px;color:${s.c};">${s.l}</div><div class="fbw"><div class="fb" style="width:${w}%;background:${s.c};opacity:.7;height:24px;">${N(s.v)}</div><span style="font-size:11px;color:var(--tm);margin-left:6px;">${pctOfStart}% of start</span></div></div>`;
-    } else {
-      const fp=i===0?null:(i===4?pct(s.v,mobStart):pct(s.v,mobPassed));
-      let badge="";
-      if(fp!==null){const cls=fp>=80?"dg":fp>=60?"dok":"dd";badge=`<span class="db ${cls}">${fp}%</span>`;}
-      mh+=`<div class="fs"><div class="fl" style="font-size:11px;color:${s.bold?"var(--ac2)":"var(--tx)"};">${s.l}</div><div class="fbw"><div class="fb" style="width:${w}%;background:${s.c};opacity:.85;height:28px;">${N(s.v)}</div><div style="display:flex;gap:6px;align-items:center;"><span class="fc">${N(s.v)}</span>${badge}</div></div></div>`;
-      if(i===0)mh+=`<div style="padding:2px 0 2px 260px;font-size:10px;color:var(--tm);">— rejection breakdown —</div>`;
-      if(i===4)mh+=`<div class="fa">▼</div>`;
-    }
+    mh+=`<div class="fs" style="margin:2px 0;"><div class="fl" style="font-size:11px;color:${s.c};">${s.l}</div><div class="fbw"><div class="fb" style="width:${w}%;background:${s.c};opacity:.7;height:24px;">${N(s.v)}</div><span style="font-size:11px;color:var(--tm);margin-left:6px;">${pct(s.v,mMax)}% of start</span></div></div>`;
   });
-  document.getElementById("mobFunnelSide").innerHTML=mh;
+  // Passed
+  mh+=`<div class="fa">▼</div>`;
+  const passW=Math.max(2,mobPassed/mMax*100),passRate=pct(mobPassed,mobStart);
+  const passCls=passRate>=80?'dg':passRate>=60?'dok':'dd';
+  mh+=`<div class="fs"><div class="fl" style="font-size:11px;color:var(--ac2);font-weight:700;">Passed All Screens ✓</div><div class="fbw"><div class="fb" style="width:${passW}%;background:${C.ac2};opacity:.85;height:28px;">${N(mobPassed)}</div><div style="display:flex;gap:6px;align-items:center;"><span class="fc">${N(mobPassed)}</span><span class="db ${passCls}">${passRate}%</span></div></div></div>`;
+  mh+=`<div class="fa">▼</div>`;
+  // Submitted
+  const subW=Math.max(2,mobSub/mMax*100),subRate=pct(mobSub,mobStart);
+  mh+=`<div class="fs"><div class="fl" style="font-size:11px;color:var(--ac2);font-weight:700;">Mobile Submitted (in-app) ✓</div><div class="fbw"><div class="fb" style="width:${subW}%;background:${C.and};height:28px;">${N(mobSub)}</div><div style="display:flex;gap:6px;align-items:center;"><span class="fc">${N(mobSub)}</span><span class="db ${subRate>=60?'dg':'dok'}">${subRate}%</span></div></div></div>`;
+  document.getElementById('mobFunnelSide').innerHTML=mh;
 
-  // ── Combined total bar ────────────────────────────────────
+  // ── Combined total bar ────────────────────────────────────────────────────
   const pW=pct(waCrea,totalSub), pM=pct(mobSub,totalSub);
-  document.getElementById("combinedTotal").innerHTML=`
+  document.getElementById('combinedTotal').innerHTML=`
     <div style="display:flex;align-items:center;gap:0;border-radius:8px;overflow:hidden;height:44px;margin-bottom:10px;">
-      <div style="width:${pW}%;background:var(--pl);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:60px;">${N(waCrea)} (${pW}%)</div>
-      <div style="width:${pM}%;background:var(--ios);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:60px;">${N(mobSub)} (${pM}%)</div>
+      <div style="width:${pW}%;background:var(--pl);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:80px;">${N(waCrea)} (${pW}%)</div>
+      <div style="width:${pM}%;background:var(--ios);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:80px;">${N(mobSub)} (${pM}%)</div>
     </div>
     <div style="display:flex;gap:20px;font-size:12px;">
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--pl);margin-right:5px;"></span>Web2App Created: <strong>${N(waCrea)}</strong></span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--ios);margin-right:5px;"></span>Mobile Submitted: <strong>${N(mobSub)}</strong></span>
-      <span style="margin-left:auto;font-weight:700;">Total: ${N(totalSub)}</span>
+      <span style="margin-left:auto;font-weight:700;">Period Total: ${N(totalSub)}</span>
     </div>`;
 
-  // ── Performance comparison table ──────────────────────────
+  // ── Performance comparison table ──────────────────────────────────────────
   const rows=[
-    ["Channel",                       "Web2App 🌐",                  "Mobile App 📱",               "Winner"],
-    ["Playground start",              N(waDist)+" distinct",         N(mobStart)+" users",           "—"],
-    ["Playground completion rate",    pct(waComp,waDist)+"%",        pct(mobPassed,mobStart)+"%",    pct(waComp,waDist)>pct(mobPassed,mobStart)?"🌐 Web2App":"📱 Mobile"],
-    ["Post-playground → submitted",   pct(waCrea,waComp)+"%",        pct(mobSub,mobPassed)+"%",      pct(waCrea,waComp)>pct(mobSub,mobPassed)?"🌐 Web2App":"📱 Mobile"],
-    ["Start → submitted (overall)",   pct(waCrea,waDist)+"%",        pct(mobSub,mobStart)+"%",       pct(waCrea,waDist)>pct(mobSub,mobStart)?"🌐 Web2App":"📱 Mobile"],
-    ["Total submitted",               N(waCrea),                     N(mobSub),                      "—"],
-    ["Pre-qualified drop-off",        N(waDrop)+" ("+pct(waDrop,waComp)+"%)",  "N/A (already in app)",  "📱 Mobile (no gap)"],
+    ['Web2App playground start',        N(waDist)+' distinct',          N(mobStart)+' users'],
+    ['Playground completion rate',       pct(waComp,waDist)+'%',         pct(mobPassed,mobStart)+'%'],
+    ['Post-playground → submitted',      pct(waCrea,waComp)+'%',         pct(mobSub,mobPassed)+'%'],
+    ['Start → submitted (overall)',      pct(waCrea,waDist)+'%',         pct(mobSub,mobStart)+'%'],
+    ['Total submitted (go-live+)',       N(waCrea),                      N(mobSub)],
+    ['Pre-qualified drop-off',           N(waDrop)+' ('+pct(waDrop,waComp)+'%)', 'N/A — already in app'],
   ];
-  document.getElementById("perfTable").innerHTML=`
-    <thead><tr>${["Metric","Web2App","Mobile App","Winner"].map(h=>`<th>${h}</th>`).join("")}</tr></thead>
-    <tbody>${rows.map((r,i)=>i===0?"":
-      `<tr>${r.map((c,j)=>`<td style="${j===0?"color:var(--tm);font-size:11px":j===3?"font-weight:700":"font-weight:"+(j>0?"600":"400")}">${c}</td>`).join("")}</tr>`
-    ).join("")}</tbody>`;
+  const winners=[null,
+    pct(waComp,waDist)>pct(mobPassed,mobStart)?'🌐':'📱',
+    pct(waCrea,waComp)>pct(mobSub,mobPassed)?'🌐':'📱',
+    pct(waCrea,waDist)>pct(mobSub,mobStart)?'🌐':'📱',
+    null, null];
+  const wlbl=[null,'Web2App','Mobile App','Mobile App',null,null];
+  document.getElementById('perfTable').innerHTML=`
+    <thead><tr><th>Metric</th><th style="color:var(--pl);">🌐 Web2App</th><th style="color:var(--ios);">📱 Mobile App</th><th>Winner</th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td style="color:var(--tm);font-size:11px;">${r[0]}</td>
+      <td style="font-weight:600;color:${winners[i]==='🌐'?'var(--pl)':''};">${r[1]}</td>
+      <td style="font-weight:600;color:${winners[i]==='📱'?'var(--ios)':''};">${r[2]}</td>
+      <td style="font-weight:700;">${winners[i]?winners[i]+' '+wlbl[i]:'—'}</td>
+    </tr>`).join('')}</tbody>`;
 
-  // ── Charts ────────────────────────────────────────────────
-  // Web2App steps daily
-  mc("w2aSteps",{type:"line",data:{labels:w2aDts.map(d=>d.slice(5)),datasets:[
-    {label:"Attempts",    data:w2aDts.map(d=>w2ad[d]?w2ad[d].attempts:0),  borderColor:"rgba(192,132,252,.5)",tension:.3,pointRadius:2},
-    {label:"Completed",   data:w2aDts.map(d=>w2ad[d]?w2ad[d].completed:0), borderColor:C.pl,tension:.3,pointRadius:2},
-    {label:"Created App", data:w2aDts.map(d=>w2ad[d]?w2ad[d].created:0),   borderColor:C.ac2,tension:.3,pointRadius:2,borderWidth:2},
+  // ── Charts ────────────────────────────────────────────────────────────────
+  const lbl = liveDates.map(d=>d.slice(5));
+
+  mc('w2aSteps',{type:'line',data:{labels:lbl,datasets:[
+    {label:'Attempts',    data:lser('w2a_attempts'),  borderColor:'rgba(192,132,252,.5)',tension:.3,pointRadius:2},
+    {label:'Completed',   data:lser('w2a_completed'), borderColor:C.pl,tension:.3,pointRadius:2},
+    {label:'Created App', data:lser('w2a_created'),   borderColor:C.ac2,tension:.3,pointRadius:2,borderWidth:2},
   ]},options:{...blO()}});
 
-  // Mobile steps daily
-  mc("mobSteps",{type:"line",data:{labels:sd(liveDates),datasets:[
-    {label:"Started",   data:ser("Unique_Playground_Mobile_number_entered",liveDates), borderColor:C.ios,tension:.3,pointRadius:2},
-    {label:"Passed",    data:liveDates.map(d=>{
-      const s=daily[d]["Unique_Playground_Mobile_number_entered"]||0;
-      const r=(daily[d]["Unique_Rejected_Min_Salary"]||0)+(daily[d]["Unique_Rejected_No_Income"]||0)
-             +(daily[d]["Unique_Rejected_DBR"]||0)+(daily[d]["Unique_Rejected_LOS"]||0)
-             +(daily[d]["Unique_Rejected_Min_and_Max_Age"]||0);
+  mc('mobSteps',{type:'line',data:{labels:lbl,datasets:[
+    {label:'Started',   data:lser('Unique_Playground_Mobile_number_entered'),borderColor:C.ios,tension:.3,pointRadius:2},
+    {label:'Passed',    data:liveDates.map(d=>{
+      const s=daily[d]['Unique_Playground_Mobile_number_entered']||0;
+      const r=(daily[d]['Unique_Rejected_Min_Salary']||0)+(daily[d]['Unique_Rejected_No_Income']||0)
+             +(daily[d]['Unique_Rejected_DBR']||0)+(daily[d]['Unique_Rejected_LOS']||0)
+             +(daily[d]['Unique_Rejected_Min_and_Max_Age']||0);
       return Math.max(0,s-r);
     }),borderColor:C.ac2,tension:.3,pointRadius:2},
-    {label:"Submitted", data:ser("mob_submitted",liveDates), borderColor:C.and,tension:.3,pointRadius:2},
+    {label:'Submitted', data:lser('mob_submitted'),borderColor:C.and,tension:.3,pointRadius:2},
   ]},options:{...blO()}});
 
-  // Web2App rates daily
-  mc("w2aRates",{type:"line",data:{labels:w2aDts.map(d=>d.slice(5)),datasets:[
-    {label:"Completion % (Distinct→Completed)", data:w2aDts.map(d=>{const r=w2ad[d];return r?pct(r.completed,r.distinct):null;}),borderColor:C.pl,tension:.3,pointRadius:2,spanGaps:false},
-    {label:"Creation % (Completed→Created)",    data:w2aDts.map(d=>{const r=w2ad[d];return r?pct(r.created,r.completed):null;}),borderColor:C.ac2,tension:.3,pointRadius:2,spanGaps:false},
-  ]},options:{responsive:true,plugins:{legend:{position:"bottom"},tooltip:{mode:"index",intersect:false}},scales:{x:xO(),y:{...yO(),ticks:{callback:v=>v+"%"},suggestedMin:0}}}});
+  mc('w2aRates',{type:'line',data:{labels:lbl,datasets:[
+    {label:'Completion % (Distinct→Completed)', data:liveDates.map(d=>pct(daily[d]['w2a_completed']||0,daily[d]['w2a_distinct']||1)),borderColor:C.pl,tension:.3,pointRadius:2,spanGaps:false},
+    {label:'Creation % (Completed→Created)',    data:liveDates.map(d=>pct(daily[d]['w2a_created']||0,daily[d]['w2a_completed']||1)),borderColor:C.ac2,tension:.3,pointRadius:2,spanGaps:false},
+  ]},options:{responsive:true,plugins:{legend:{position:'bottom'},tooltip:{mode:'index',intersect:false}},scales:{x:xO(),y:{...yO(),ticks:{callback:v=>v+'%'},suggestedMin:0}}}});
 
-  // Mobile rejection rates daily
-  mc("mobRejRates",{type:"line",data:{labels:sd(liveDates),datasets:[
-    {label:"S1 Income %", data:liveDates.map(d=>pct((daily[d]["Unique_Rejected_Min_Salary"]||0)+(daily[d]["Unique_Rejected_No_Income"]||0),daily[d]["Unique_Playground_Mobile_number_entered"]||1)),borderColor:C.s1,tension:.3,pointRadius:2},
-    {label:"S2 DBR %",    data:liveDates.map(d=>pct(daily[d]["Unique_Rejected_DBR"]||0,daily[d]["Unique_Playground_Mobile_number_entered"]||1)),borderColor:C.s2,tension:.3,pointRadius:2},
-    {label:"S3 LOS %",    data:liveDates.map(d=>pct((daily[d]["Unique_Rejected_LOS"]||0)+(daily[d]["Unique_Rejected_Min_and_Max_Age"]||0),daily[d]["Unique_Playground_Mobile_number_entered"]||1)),borderColor:C.s3,tension:.3,pointRadius:2},
-  ]},options:{responsive:true,plugins:{legend:{position:"bottom"},tooltip:{mode:"index",intersect:false}},scales:{x:xO(),y:{...yO(),ticks:{callback:v=>v+"%"},suggestedMin:0}}}});
+  mc('mobRejRates',{type:'line',data:{labels:lbl,datasets:[
+    {label:'S1 Income %', data:liveDates.map(d=>pct((daily[d]['Unique_Rejected_Min_Salary']||0)+(daily[d]['Unique_Rejected_No_Income']||0),daily[d]['Unique_Playground_Mobile_number_entered']||1)),borderColor:C.s1,tension:.3,pointRadius:2},
+    {label:'S2 DBR %',    data:liveDates.map(d=>pct(daily[d]['Unique_Rejected_DBR']||0,daily[d]['Unique_Playground_Mobile_number_entered']||1)),borderColor:C.s2,tension:.3,pointRadius:2},
+    {label:'S3 LOS %',    data:liveDates.map(d=>pct((daily[d]['Unique_Rejected_LOS']||0)+(daily[d]['Unique_Rejected_Min_and_Max_Age']||0),daily[d]['Unique_Playground_Mobile_number_entered']||1)),borderColor:C.s3,tension:.3,pointRadius:2},
+  ]},options:{responsive:true,plugins:{legend:{position:'bottom'},tooltip:{mode:'index',intersect:false}},scales:{x:xO(),y:{...yO(),ticks:{callback:v=>v+'%'},suggestedMin:0}}}});
 
-  // ── Registration gate ─────────────────────────────────────
-  const regMax=mobDOB||1;
-  const rStages=[
-    {l:"DOB / Password Step (all channels)",       v:mobDOB,       c:C.wn},
-    {l:"CITC Passed — App Created",                v:mobCITC,      c:C.ac2, bold:true},
-    {l:"CITC Blocked",                             v:tBlk,         c:"var(--dn)", rej:true},
-    {l:"CITC Unverified",                          v:tUnv,         c:"var(--wn)", rej:true},
-  ];
-  let rh=`<div style="font-size:11px;color:var(--tm);margin-bottom:10px;">Applies to all channels. Web2App and Mobile users both go through this step.</div>`;
-  rh+=`<div class="fs"><div class="fl" style="font-size:11px;">${rStages[0].l}</div><div class="fbw"><div class="fb" style="width:100%;background:${rStages[0].c};opacity:.85;height:30px;">${N(rStages[0].v)}</div><span class="fc">${N(rStages[0].v)}</span></div></div>`;
+  // ── Registration gate ─────────────────────────────────────────────────────
+  let rh=`<div style="font-size:11px;color:var(--tm);margin-bottom:10px;">Applies to all channels. Web2App and Mobile users both go through CITC here.</div>`;
+  rh+=`<div class="fs"><div class="fl" style="font-size:11px;">DOB / Password Step (all channels, full period)</div><div class="fbw"><div class="fb" style="width:100%;background:${C.wn};opacity:.85;height:30px;">${N(mobDOB)}</div><span class="fc">${N(mobDOB)}</span></div></div>`;
   rh+=`<div style="padding:2px 0 2px 260px;font-size:10px;color:var(--tm);">CITC triggered here ▼</div>`;
-  rh+=`<div class="fs"><div class="fl" style="font-size:11px;color:var(--ac2);font-weight:700;">${rStages[1].l}</div><div class="fbw"><div class="fb ac" style="width:${pct(mobCITC,mobDOB)}%;height:30px;">${N(mobCITC)}</div><div style="display:flex;gap:7px;align-items:center;"><span class="fc">${N(mobCITC)}</span><span class="db ${pct(mobCITC,mobDOB)>=80?"dg":"dok"}">${pct(mobCITC,mobDOB)}%</span></div></div></div>`;
+  const citcW=pct(mobCITC,mobDOB);
+  rh+=`<div class="fs"><div class="fl" style="font-size:11px;color:var(--ac2);font-weight:700;">CITC Passed — App Created</div><div class="fbw"><div class="fb ac" style="width:${citcW}%;height:30px;">${N(mobCITC)}</div><div style="display:flex;gap:7px;align-items:center;"><span class="fc">${N(mobCITC)}</span><span class="db ${citcW>=80?'dg':'dok'}">${citcW}%</span></div></div></div>`;
   rh+=`<div style="padding:4px 0 0 260px;display:flex;gap:20px;font-size:11px;color:var(--tm);">
     <span>🚫 Blocked: <strong style="color:var(--dn)">${N(tBlk)}</strong> (${pct(tBlk,mobDOB)}%)</span>
     <span>⚠️ Unverified: <strong style="color:var(--wn)">${N(tUnv)}</strong> (${pct(tUnv,mobDOB)}%)</span>
-  </div>
-  <div style="margin-top:10px;font-size:11px;color:var(--pl);background:rgba(192,132,252,.07);border-radius:7px;padding:8px 12px;">
-    💡 app_submitted (${N(sum("app_submitted"))}) &gt; CITC_passed (${N(mobCITC)}) is a timing artifact: Web2App users submit on the web before completing in-app CITC registration.
   </div>`;
-  document.getElementById("regFunnel").innerHTML=rh;
+  document.getElementById('regFunnel').innerHTML=rh;
 
-  // ── Pre/Post comparison ───────────────────────────────────
-  if(preDates.length && postDates.length){
-    const preS=sum("app_submitted",preDates),postS=sum("app_submitted",postDates);
-    const preC=sum("Unique_App_created_Passed_CITC_Apps_and_SDK",preDates),postC=sum("Unique_App_created_Passed_CITC_Apps_and_SDK",postDates);
-    const preA=sum("Activated",preDates),postA=sum("Activated",postDates);
-    const preO=sum("Offered",preDates),postO=sum("Offered",postDates);
-    document.getElementById("prePostGrid").innerHTML=`
+  // ── Pre/Post comparison ───────────────────────────────────────────────────
+  const ppEl = document.getElementById('prePostGrid');
+  if(preDates.length && liveDates.length){
+    const ps=(m,dt)=>dt.reduce((a,d)=>a+(daily[d][m]||0),0);
+    const preS=ps('app_submitted',preDates), postS=ps('app_submitted',liveDates);
+    const preO=ps('Offered',preDates), postO=ps('Offered',liveDates);
+    const preA=ps('Activated',preDates), postA=ps('Activated',liveDates);
+    const preC=ps('Unique_App_created_Passed_CITC_Apps_and_SDK',preDates), postC=ps('Unique_App_created_Passed_CITC_Apps_and_SDK',liveDates);
+    ppEl.innerHTML=`
       <div class="compare-card"><h4 class="pre">📅 Before Web2App (${preDates[0]} → ${preDates[preDates.length-1]}, ${preDates.length}d)</h4>
-        ${[["Submissions/day",(preS/preDates.length).toFixed(0)],["CITC Passed/day",(preC/preDates.length).toFixed(0)],["Offer Rate",pct(preO,preS)+"%"],["Activations/day",(preA/preDates.length).toFixed(0)]].map(([l,v])=>`<div class="cmp-row"><span class="cmp-label">${l}</span><span class="cmp-val">${v}</span></div>`).join("")}</div>
-      <div class="compare-card"><h4 class="post">🌐 After Web2App (${postDates[0]} → ${postDates[postDates.length-1]}, ${postDates.length}d)</h4>
-        ${[["Submissions/day",(postS/postDates.length).toFixed(0)],["CITC Passed/day",(postC/postDates.length).toFixed(0)],["Offer Rate",pct(postO,postS)+"%"],["Activations/day",(postA/postDates.length).toFixed(0)]].map(([l,v])=>`<div class="cmp-row"><span class="cmp-label">${l}</span><span class="cmp-val">${v}</span></div>`).join("")}</div>`;
+        ${[['Submissions/day',(preS/preDates.length).toFixed(0)],['CITC Passed/day',(preC/preDates.length).toFixed(0)],['Offer Rate',pct(preO,preS)+'%'],['Activations/day',(preA/preDates.length).toFixed(0)]].map(([l,v])=>`<div class="cmp-row"><span class="cmp-label">${l}</span><span class="cmp-val">${v}</span></div>`).join('')}</div>
+      <div class="compare-card"><h4 class="post">🌐 After Web2App (${liveDates[0]} → ${liveDates[liveDates.length-1]}, ${liveDates.length}d)</h4>
+        ${[['Submissions/day',(postS/liveDates.length).toFixed(0)],['CITC Passed/day',(postC/liveDates.length).toFixed(0)],['Offer Rate',pct(postO,postS)+'%'],['Activations/day',(postA/liveDates.length).toFixed(0)]].map(([l,v])=>`<div class="cmp-row"><span class="cmp-label">${l}</span><span class="cmp-val">${v}</span></div>`).join('')}</div>`;
   } else {
-    document.getElementById("prePostGrid").innerHTML=`<div style="color:var(--tm);font-size:12px;grid-column:span 2;">Select a date range spanning June 4 to see the pre/post Web2App comparison.</div>`;
+    ppEl.innerHTML=`<div style="color:var(--tm);font-size:12px;grid-column:span 2;">Select a date range spanning June 4 to see the pre/post Web2App comparison.</div>`;
   }
 
-  // ── Insights ──────────────────────────────────────────────
-  document.getElementById("playInsights").innerHTML=[
-    {c:"pl",t:`🌐 Web2App playground completion (${pct(waComp,waDist)}%) beats mobile (${pct(mobPassed,mobStart)}%) by ${(pct(waComp,waDist)-pct(mobPassed,mobStart)).toFixed(1)}pp`,b:"Web2App users self-select (they sought out the web form) and face a larger-screen, lower-friction UX. Mobile users encounter hard rejection gates in real-time. The web channel naturally attracts higher-intent users."},
-    {c:"dn",t:`🚨 But mobile wins overall: ${pct(mobSub,mobStart)}% start→submitted vs web2app's ${pct(waCrea,waDist)}%`,b:`The app download step after web playground kills web2app's overall conversion. ${N(waDrop)} users (${pct(waDrop,waComp)}%) passed all 3 screens on the web but never submitted in-app. Web2App is a top-of-funnel acquisition channel — it needs a strong re-engagement mechanism (deep link + SMS within 1h) to close the gap.`},
-    {c:"dn",t:`🚨 Screen 1 (Income) is mobile's biggest gate — ${pct(mobS1rej,mobStart)}% rejected`,b:`${N(mobS1rej)} mobile users fail at the first question. Web2App users who reach this point on the web already passed — so web2app indirectly filters this before the app is ever opened. Consider surfacing a salary expectation hint on the mobile landing screen before starting playground.`},
-    {c:"wn",t:`⚠️ Web2App volume is growing fast (${N(waAtt)} attempts in ${w2aDts.length} days)`,b:"As web2app scales, the 54.4% post-playground drop-off becomes increasingly expensive. Prioritise the re-engagement flow now before volume grows further."},
-    {c:"ok",t:`✅ Mobile submitted: ${N(mobSub)} vs Web2App created: ${N(waCrea)} — numbers reconcile perfectly`,b:`Mobile (${N(mobSub)}) + Web2App (${N(waCrea)}) = ${N(totalSub)} total app_submitted. Both data sources are consistent. The dashboard can be trusted.`},
-  ].map(i=>`<div class="ib ${i.c}"><div class="it">${i.t}</div><div class="ib-body">${i.b}</div></div>`).join("");
+  // ── Insights ──────────────────────────────────────────────────────────────
+  document.getElementById('playInsights').innerHTML=[
+    {c:'pl',t:`🌐 Web2App playground completion (${pct(waComp,waDist)}%) beats mobile (${pct(mobPassed,mobStart)}%) by ${(pct(waComp,waDist)-pct(mobPassed,mobStart)).toFixed(1)}pp`,b:'Web2App users self-select — they sought out the web form — and face a larger-screen, lower-friction UX. Mobile users hit hard rejection gates in real-time. The web channel attracts higher-intent users.'},
+    {c:'dn',t:`🚨 But mobile wins overall: ${pct(mobSub,mobStart)}% start→submitted vs Web2App\'s ${pct(waCrea,waDist)}%`,b:`The app download step after web playground kills Web2App\'s overall conversion. ${N(waDrop)} users (${pct(waDrop,waComp)}%) passed all 3 screens on the web but never submitted in-app. Web2App is a top-of-funnel acquisition channel — it needs strong re-engagement (deep link + SMS within 1h) to close this gap.`},
+    {c:'dn',t:`🚨 Screen 1 (Income) is mobile\'s biggest gate — ${pct(mobS1rej,mobStart)}% rejected`,b:`${N(mobS1rej)} mobile users fail at the first question. Web2App users who reach this point already passed on the web. Consider surfacing a salary expectation hint before starting playground.`},
+    {c:'wn',t:`⚠️ Web2App volume is growing fast (${N(waAtt)} attempts, ${liveDates.length} days)`,b:'As Web2App scales, the post-playground drop-off becomes increasingly expensive. Prioritise the re-engagement flow now.'},
+    {c:'ok',t:`✅ Numbers reconcile: Web2App (${N(waCrea)}) + Mobile (${N(mobSub)}) = ${N(waCrea+mobSub)} vs total submitted ${N(totalSub)}`,b:'Both sources are consistent. The dashboard numbers can be trusted.'},
+  ].map(i=>`<div class="ib ${i.c}"><div class="it">${i.t}</div><div class="ib-body">${i.b}</div></div>`).join('');
 }
 
 
