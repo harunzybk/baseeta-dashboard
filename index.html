@@ -344,6 +344,137 @@ function buildOverview(){
 }
 
 // ── PLAYGROUND ────
+function buildBooking(){
+  const tSub  = sum("app_submitted");
+  const tOff  = sum("Offered");
+  const tAc   = sum("offerAccepted");
+  const tSg   = sum("Contract_Signed");
+  const tBk   = sum("Booked_general_STP_NonSTP");
+  const tAct  = sum("Activated");
+  const tDev  = sum("Total_Unique_Devices_Per_Day");
+
+  // Rates
+  const bkRate   = pct(tBk, tSub);      // Booking rate: booked / submitted
+  const actRate  = pct(tAct, tBk);      // Activation rate: activated / booked
+  const sub2bk   = pct(tBk, tSub);      // Submission → booking (same as bkRate)
+  const acc2bk   = pct(tBk, tAc);       // Offer acceptance → booking
+  const off2bk   = pct(tBk, tOff);      // Offer → booking
+  const avgBkDay = Math.round(tBk / fd.length);
+  const avgActDay= Math.round(tAct / fd.length);
+
+  // KPIs
+  document.getElementById("bkKpi").innerHTML=[
+    {l:"Booking Rate",        v:bkRate+"%",     s:"Booked / Submitted · North Star",             c:"ok"},
+    {l:"Avg Bookings/Day",    v:N(avgBkDay),    s:fd.length+"d avg",                             c:"ok"},
+    {l:"Activation Rate",     v:actRate+"%",    s:"Activated / Booked",                          c:""},
+    {l:"Avg Activations/Day", v:N(avgActDay),   s:fd.length+"d avg",                             c:""},
+    {l:"Submission → Booking",v:sub2bk+"%",     s:"End-to-end post-submission conversion",       c:"wn"},
+    {l:"Offer → Booking",     v:off2bk+"%",     s:"Offered → Booked",                            c:"wn"},
+    {l:"Acceptance → Booking",v:acc2bk+"%",     s:"offerAccepted → Booked",                      c:"wn"},
+  ].map(x=>`<div class="kc ${x.c}"><div class="kl">${x.l}</div><div class="kv">${x.v}</div><div class="ks">${x.s}</div></div>`).join("");
+
+  const rateOpts = (label, color) => ({
+    responsive:true,
+    plugins:{legend:{display:false},tooltip:{mode:"index",intersect:false,callbacks:{label:c=>`${label}: ${c.raw}%`}}},
+    scales:{x:xO(),y:{...yO(),ticks:{callback:v=>v+"%"},suggestedMin:0}}
+  });
+
+  // Booking rate daily
+  mc("bkRateDaily",{type:"line",data:{labels:sd(),datasets:[{
+    label:"Booking Rate %",
+    data:fd.map(d=>pct(daily[d]["Booked_general_STP_NonSTP"],daily[d]["app_submitted"])),
+    borderColor:C.ac2,backgroundColor:"rgba(0,212,170,.08)",fill:true,tension:.3,pointRadius:fd.length>14?2:4
+  }]},options:rateOpts("Booking Rate","var(--ac2)")});
+
+  // Activation rate daily
+  mc("actRateDaily",{type:"line",data:{labels:sd(),datasets:[{
+    label:"Activation Rate %",
+    data:fd.map(d=>pct(daily[d]["Activated"],daily[d]["Booked_general_STP_NonSTP"])),
+    borderColor:C.ac,backgroundColor:"rgba(108,99,255,.08)",fill:true,tension:.3,pointRadius:fd.length>14?2:4
+  }]},options:rateOpts("Activation Rate","var(--ac)")});
+
+  // Submission → Booking daily
+  mc("sub2bk",{type:"line",data:{labels:sd(),datasets:[{
+    label:"Sub → Booking %",
+    data:fd.map(d=>pct(daily[d]["Booked_general_STP_NonSTP"],daily[d]["app_submitted"])),
+    borderColor:C.wn,backgroundColor:"rgba(255,181,71,.08)",fill:true,tension:.3,pointRadius:fd.length>14?2:4
+  }]},options:rateOpts("Sub→Booking","var(--wn)")});
+
+  // Offer acceptance → Booking daily
+  mc("acc2bk",{type:"line",data:{labels:sd(),datasets:[{
+    label:"Acceptance → Booking %",
+    data:fd.map(d=>pct(daily[d]["Booked_general_STP_NonSTP"],daily[d]["offerAccepted"])),
+    borderColor:C.ios,backgroundColor:"rgba(94,156,255,.08)",fill:true,tension:.3,pointRadius:fd.length>14?2:4
+  }]},options:rateOpts("Acc→Booking","var(--ios)")});
+
+  // Post-submission conversion funnel
+  const stages=[
+    {k:"app_submitted",          l:"App Submitted",           color:C.ac},
+    {k:"Offered",                l:"Offered",                 color:C.wn},
+    {k:"offerAccepted",          l:"Offer Accepted",          color:C.ios},
+    {k:"Contract_Signed",        l:"Contract Signed",         color:C.pl},
+    {k:"Booked_general_STP_NonSTP",l:"Booked ⭐",            color:C.ac2},
+    {k:"Activated",              l:"Activated",               color:"#34d399"},
+  ];
+  const tots=stages.map(s=>sum(s.k)), mx=tots[0];
+  let fh="";
+  tots.forEach((t,i)=>{
+    const w=Math.max(3,(t/mx)*100);
+    const fromPrev=i===0?null:pct(t,tots[i-1]);
+    const fromSub=pct(t,mx);
+    let badge="";
+    if(fromPrev!==null){
+      const cls=fromPrev>=85?"dg":fromPrev>=65?"dok":"dd";
+      badge=`<span class="db ${cls}">${fromPrev}% from prev</span>`;
+    }
+    const isBk=stages[i].k==="Booked_general_STP_NonSTP";
+    const isAct=stages[i].k==="Activated";
+    fh+=`<div class="fs">
+      <div class="fl" style="${isBk?"font-weight:700;color:var(--ac2)":isAct?"color:#34d399":""}">${stages[i].l}</div>
+      <div class="fbw">
+        <div class="fb" style="width:${w}%;background:${stages[i].color};opacity:.85;${isBk?"box-shadow:0 0 10px rgba(0,212,170,.35)":""};">${(t/1000).toFixed(1)}k</div>
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span class="fc">${N(t)}</span>
+          <span class="fp">${fromSub}% of submitted</span>
+          ${badge}
+        </div>
+      </div>
+    </div>`;
+    if(i<tots.length-1)fh+=`<div class="fa">▼</div>`;
+  });
+  document.getElementById("bkFunnel").innerHTML=fh;
+
+  // Booked vs Activated daily volume
+  mc("bkActVol",{type:"bar",data:{labels:sd(),datasets:[
+    {label:"Booked",    data:ser("Booked_general_STP_NonSTP"),backgroundColor:"rgba(0,212,170,.7)",borderRadius:3},
+    {label:"Activated", data:ser("Activated"),backgroundColor:"rgba(108,99,255,.7)",borderRadius:3},
+  ]},options:{responsive:true,plugins:{legend:{position:"bottom"},tooltip:{mode:"index",intersect:false}},scales:{x:xO(),y:yO()}}});
+
+  // 7-day rolling booking rate
+  const allBk =ALL.map(d=>daily[d]["Booked_general_STP_NonSTP"]||0);
+  const allSub=ALL.map(d=>daily[d]["app_submitted"]||0);
+  mc("bkRoll",{type:"line",data:{labels:sd(),datasets:[{
+    label:"7d Rolling Booking Rate %",
+    data:fd.map(d=>{
+      const i=ALL.indexOf(d);
+      if(i<6)return null;
+      const wBk =allBk.slice(i-6,i+1).reduce((a,b)=>a+b,0);
+      const wSub=allSub.slice(i-6,i+1).reduce((a,b)=>a+b,0);
+      return pct(wBk,wSub);
+    }),
+    borderColor:C.ac2,backgroundColor:"rgba(0,212,170,.08)",fill:true,tension:.4,pointRadius:2,spanGaps:false
+  }]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:xO(),y:{...yO(),ticks:{callback:v=>v+"%"},suggestedMin:0}}}});
+
+  // Insights
+  const gap=tAc-tBk, gapPct=pct(gap,tAc);
+  document.getElementById("bkInsights").innerHTML=[
+    {c:"ok",t:`✅ Booking Rate: ${bkRate}% of submitted apps get booked`,b:`Out of ${N(tSub)} submissions, ${N(tBk)} converted to a booking. The main losses are at the Offered stage (${pct(tOff,tSub)}% receive an offer) and at DE/GOSIMOF rejections before that. Improving offer rate has the most direct impact on the North Star.`},
+    {c:"ok",t:`✅ Offer Acceptance → Booking: ${acc2bk}%`,b:`Of the ${N(tAc)} users who accepted an offer, ${N(tBk)} booked. This is the tightest part of the funnel — once users accept, most complete. Focus upstream, not here.`},
+    {c:gap>0?"wn":"ok",t:`${gap>0?"⚠️":"✅"} Booked → Activated gap: ${N(gap)} users (${gapPct}% of accepted)`,b:gap>0?`${N(tBk)} booked but only ${N(tAct)} activated. This ${N(gap)}-user gap may represent disbursement delays, cancellations, or STP vs Non-STP processing time. Track this gap by STP/Non-STP split if data allows.`:`Activation rate is ${actRate}% — nearly all booked loans activate. No significant disbursement gap.`},
+    {c:actRate>=90?"ok":"wn",t:`${actRate>=90?"✅":"⚠️"} Activation Rate: ${actRate}% of booked loans activate`,b:`${N(tBk)} loans booked, ${N(tAct)} activated. The ${N(tBk-tAct)}-loan gap between booking and activation likely reflects disbursement processing time (STP vs Non-STP) and potential cancellations before funds are released. If this gap is growing week-over-week, investigate Non-STP holds. If stable, it's an expected ops lag.`},
+  ].map(i=>`<div class="ib ${i.c}"><div class="it">${i.t}</div><div class="ib-body">${i.b}</div></div>`).join("");
+}
+
 function buildPlayground(){
   // W2A go-live = W2A ("2026-06-04")
   const liveDates = fd.filter(d=>d>=W2A);
