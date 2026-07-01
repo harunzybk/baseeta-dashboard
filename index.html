@@ -81,6 +81,12 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSyst
 .s2b{background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3);}
 .s3b{background:rgba(234,179,8,.15);color:#facc15;border:1px solid rgba(234,179,8,.3);}
 .screen-section{margin-bottom:14px;}
+
+.plat-btn{padding:3px 12px;border-radius:20px;border:1px solid var(--bd);background:transparent;color:var(--tm);font-size:11px;cursor:pointer;transition:all .2s;}
+.plat-btn:hover{border-color:var(--ac);color:var(--ac);}
+.plat-btn.active{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600;}
+.plat-btn#plat-ios.active{background:var(--ios);border-color:var(--ios);}
+.plat-btn#plat-android.active{background:var(--and);border-color:var(--and);}
 </style>
 </head>
 <body>
@@ -102,6 +108,11 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSyst
   <button class="pb" onclick="setPreset(0,'wk')">This Week</button>
   <div class="sep"></div>
   <div class="fi">Showing <strong id="fCount">—</strong> days</div>
+  <div class="sep"></div>
+  <span style="font-size:11px;color:var(--tm);font-weight:600;">Platform:</span>
+  <button class="plat-btn active" id="plat-all"    onclick="setPlatform('all')"    >All</button>
+  <button class="plat-btn"        id="plat-ios"    onclick="setPlatform('ios')"    >iOS</button>
+  <button class="plat-btn"        id="plat-android" onclick="setPlatform('android')">Android</button>
 </div>
 
 <div class="tabs">
@@ -263,8 +274,15 @@ const RAW={"dates":["2026-05-30","2026-05-31","2026-06-01","2026-06-02","2026-06
 const ALL=RAW.dates, daily=RAW.daily, W2A=RAW.web2app_start;
 let fd=[...ALL];
 const CR={};
-function sum(m,dt){return(dt||fd).reduce((a,d)=>a+(daily[d][m]||0),0);}
-function ser(m,dt){return(dt||fd).map(d=>daily[d][m]||0);}
+let platFilter='all';
+const PLAT_PFX={ios:'IOS_',android:'Android_'};
+function pkey(m,d){
+  if(platFilter==='all')return m;
+  const pfx=PLAT_PFX[platFilter];
+  return (pfx+m) in daily[d]?pfx+m:m;
+}
+function sum(m,dt){return(dt||fd).reduce((a,d)=>a+(daily[d][pkey(m,d)]||0),0);}
+function ser(m,dt){return(dt||fd).map(d=>daily[d][pkey(m,d)]||0);}
 function pct(n,d){return d>0?+(n/d*100).toFixed(1):0;}
 function fmt(n){return n>=1000?(n/1000).toFixed(1)+"k":n;}
 function N(n){return n.toLocaleString();}
@@ -745,6 +763,12 @@ function buildInsights(){
 const TABS=["overview","booking","playground","funnel","trends","platform","rejections","insights"];
 const BUILDERS={overview:buildOverview,booking:buildBooking,playground:buildPlayground,funnel:buildFunnel,trends:buildTrends,platform:buildPlatform,rejections:buildRejections,insights:buildInsights};
 const INIT={};
+function setPlatform(p){
+  platFilter=p;
+  document.querySelectorAll('.plat-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('plat-'+p).classList.add('active');
+  rebuildAll();
+}
 function rebuildAll(){Object.keys(INIT).forEach(n=>{if(INIT[n])BUILDERS[n]();});}
 function sw(name){
   document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active",TABS[i]===name));
